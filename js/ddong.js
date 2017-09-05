@@ -22,6 +22,7 @@ var sprite;
 var ballNumber;
 //cursor
 var cursors;
+var jumpButton;
 var stateText;
 
 //timer is very important variable since it manages the loop for repeating events.
@@ -51,6 +52,7 @@ function create() {
     sprite = game.add.sprite(400, 550, 'phaser'); //(x,y,picture)
     game.physics.enable(sprite, Phaser.Physics.ARCADE);
 	sprite.body.collideWorldBounds=true;
+    sprite.body.gravity.y = 500;
  
 	//Balls are controlled together as a group 
     balls = game.add.group();
@@ -61,6 +63,7 @@ function create() {
 	//Register cursors for user control
 	//You might want to use SPACE later, but it requires a different method. 
     cursors = game.input.keyboard.createCursorKeys();
+    jumpButton = game.input.keyboard.addKey(Phaser.Keyboard.SPACEBAR);
    
 	//Set timer to measure the play time and set repeating events. 
 	timer = game.time.create(false);
@@ -100,7 +103,7 @@ function update() {
    
 	//Initial velocity of character 
     sprite.body.velocity.x = 0;
-    sprite.body.velocity.y = 0;
+    //sprite.body.velocity.y = 0;
     
 	//User control 
     if (cursors.left.isDown)
@@ -111,7 +114,10 @@ function update() {
     {
         sprite.body.velocity.x = 300;
     }
-
+    if (jumpButton.isDown && (sprite.body.onFloor() || sprite.body.touching.down))
+    {
+        sprite.body.velocity.y = -400;
+    }
 }
 
 //Callback function
