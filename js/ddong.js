@@ -30,6 +30,11 @@ var myLoop;
 var startInterval;
 var Interval;
 
+var WINDOW_WIDTH = 750;
+var WINDOW_HEIGHT = 600;
+var game = new Phaser.Game(WINDOW_WIDTH, WINDOW_HEIGHT, Phaser.AUTO, '', {preload:preload, create:create, update:update, render:render} );
+var WORLD_SIZE = {w:750,h:500};
+
 function create() {
     
     game.stage.backgroundColor = '#6688ee';
@@ -45,7 +50,8 @@ function create() {
 	//Create an object for user
     sprite = game.add.sprite(400, 550, 'phaser'); //(x,y,picture)
     game.physics.enable(sprite, Phaser.Physics.ARCADE);
-   
+	sprite.body.collideWorldBounds=true;
+ 
 	//Balls are controlled together as a group 
     balls = game.add.group();
     balls.enableBody = true;
@@ -112,7 +118,7 @@ function update() {
 function collisionHandler (phaser, ball) {
 	
 	//Remove the ball sprite
-    ball.kill();
+    balls.removeAll();
 	
 	//Display game-over message
     stateText.text=" GAME OVER \n " + Number(timer.seconds).toFixed(2) + "\n Click to restart";
