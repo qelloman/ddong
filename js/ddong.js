@@ -2,7 +2,7 @@
 function preload() {
 	
 	//Default
-    game.load.baseURL = '/assets/';
+    game.load.baseURL = './assets/';
     game.load.crossOrigin = 'anonymous';
 
 	//Load image reuqired for display
@@ -12,6 +12,9 @@ function preload() {
     game.load.spritesheet('dude', 'dude.png', 32, 48);
 
 }
+
+
+
 //Part2 : create
 
 //Some variables are needed in both create() and update(), so it is declared as global variables.
@@ -49,22 +52,41 @@ var player = {
 sprite:null,//Will hold the sprite when it's created 
 speed_x:0,// This is the speed it's currently moving at
 speed_y:0,
+face:'front',
 update: function(){
-	// Move forward
-	this.speed_x = 0;
+
+	// No button pressed
+	if (this.sprite.body.velocity.x < 25 && this.sprite.body.velocity.x > -25 ) {
+		this.sprite.body.velocity.x = 0;
+		this.face = 'front';
+	} else if (this.sprite.body.velocity.x >= 25 ) {
+		this.sprite.body.velocity.x -= 25; 
+		this.face = 'right';
+	} else if (this.sprite.body.velocity.x <= -25 ) {
+		this.sprite.body.velocity.x += 25; 
+		this.face = 'left';
+	}
+	
+	// Button pressed
 	if(game.input.keyboard.isDown(Phaser.Keyboard.RIGHT)){
-        this.sprite.body.acceleration.x = 400;
-		player.sprite.animations.play('right');
+		if (this.sprite.body.velocity.x < 400) {
+	        this.sprite.body.velocity.x += 50;
+		}
 	} else if (game.input.keyboard.isDown(Phaser.Keyboard.LEFT)){
-        this.sprite.body.acceleration.x = -400;
-		//this.speed_x = -4;
-		player.sprite.animations.play('left');
+		if (this.sprite.body.velocity.x > -400) {
+	        this.sprite.body.velocity.x -= 50;
+		}
+	}
+	
+	// Determine animation.
+	if (this.face == 'right') {	
+		this.sprite.animations.play('right');
+	} else if (this.face == 'left') {
+		this.sprite.animations.play('left');
+	} else if (this.face == 'front') {
+		this.sprite.frame = 4;
 	}	
-	//this.sprite.x += this.speed_x;
-	//this.sprite.y += this.speed_y;
-  
-	// Tell the server we've moved 
-	socket.emit('move-player',{x:this.sprite.x,y:this.sprite.y})
+	socket.emit('move-player',{x:this.sprite.body.x,y:this.sprite.body.y,vx:this.sprite.body.velocity.x, vy:this.sprite.body.velocity.y,face:this.face})
 
 }
 };
@@ -88,7 +110,10 @@ function create() {
     player.sprite.animations.add('left', [0, 1, 2, 3], 10, true);
     player.sprite.animations.add('right', [5, 6, 7, 8], 10, true);
     game.physics.enable(player.sprite, Phaser.Physics.ARCADE);
+    player.sprite.body.enable = true;
+	player.sprite.body.bounce.setTo(1.5,1.5);
 	player.sprite.body.collideWorldBounds = true;
+	console.log("test");
     
 	other_players_group = game.add.physicsGroup();
     game.physics.enable(other_players_group, Phaser.Physics.ARCADE);
@@ -148,7 +173,7 @@ function CreatePlayer(x, y) {
 	// returns the sprite just created 
 	var other_player = other_players_group.create(x,y,'dude');
 	other_player.body.collideWorldBounds = true;
-	other_player.body.bounce.setTo(0.8,0.8);
+	other_player.body.bounce.setTo(1.5,1.5);
 	other_player.anchor.setTo(0.5,0.5);
 	return other_player;
 }
@@ -179,19 +204,6 @@ function update() {
 	game.physics.arcade.collide(player.sprite, other_players_group);
 	player.update();
     
-	//User control 
-    if (cursors.left.isDown)
-    {
-     //   sprite.body.acceleration.x = -200;
-    }
-    else if (cursors.right.isDown)
-    {
-      //  sprite.body.acceleration.x = 200;
-    }
-    if (jumpButton.isDown )
-    {
-       // sprite.body.velocity.y = -400;
-    }
 }
 
 //Callback function
