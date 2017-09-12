@@ -2,14 +2,14 @@
 function preload() {
 	
 	//Default
-    game.load.baseURL = 'http://examples.phaser.io/assets/';
+    game.load.baseURL = '/assets/';
     game.load.crossOrigin = 'anonymous';
 
 	//Load image reuqired for display
 	//In my case, I need a phaser for player and a ball for osbtacles.
-    game.load.image('phaser', 'sprites/phaser-dude.png');
-    game.load.image('ball', 'sprites/blue_ball.png');
-
+    //game.load.image('phaser', 'sprites/phaser-dude.png');
+    game.load.image('ball', 'blue_ball.png');
+    game.load.spritesheet('dude', 'dude.png', 32, 48);
 
 }
 //Part2 : create
@@ -18,8 +18,13 @@ function preload() {
 
 //character
 var sprite;
+var sprite_copy;
 //# of ball for scores
 var ballNumber;
+var balls;
+var players;
+var other_players_group;
+
 //cursor
 var cursors;
 var jumpButton;
@@ -36,6 +41,35 @@ var WINDOW_HEIGHT = 600;
 var game = new Phaser.Game(WINDOW_WIDTH, WINDOW_HEIGHT, Phaser.AUTO, '', {preload:preload, create:create, update:update, render:render} );
 var WORLD_SIZE = {w:750,h:500};
 
+//Multi-play
+var socket; //Declare it in this scope, initialize in the `create` function
+var other_players = {};
+
+var player = {
+sprite:null,//Will hold the sprite when it's created 
+speed_x:0,// This is the speed it's currently moving at
+speed_y:0,
+update: function(){
+	// Move forward
+	this.speed_x = 0;
+	if(game.input.keyboard.isDown(Phaser.Keyboard.RIGHT)){
+        this.sprite.body.acceleration.x = 400;
+		player.sprite.animations.play('right');
+	} else if (game.input.keyboard.isDown(Phaser.Keyboard.LEFT)){
+        this.sprite.body.acceleration.x = -400;
+		//this.speed_x = -4;
+		player.sprite.animations.play('left');
+	}	
+	//this.sprite.x += this.speed_x;
+	//this.sprite.y += this.speed_y;
+  
+	// Tell the server we've moved 
+	socket.emit('move-player',{x:this.sprite.x,y:this.sprite.y})
+
+}
+};
+
+
 function create() {
     
     game.stage.backgroundColor = '#6688ee';
@@ -49,11 +83,45 @@ function create() {
     stateText.visiable = false;
 
 	//Create an object for user
-    sprite = game.add.sprite(400, 550, 'phaser'); //(x,y,picture)
-    game.physics.enable(sprite, Phaser.Physics.ARCADE);
-	sprite.body.collideWorldBounds=true;
-    sprite.body.gravity.y = 500;
- 
+	player.sprite = game.add.sprite(game.world.randomX, 550, 'dude');
+	player.sprite.anchor.setTo(0.5,0.5);
+    player.sprite.animations.add('left', [0, 1, 2, 3], 10, true);
+    player.sprite.animations.add('right', [5, 6, 7, 8], 10, true);
+    game.physics.enable(player.sprite, Phaser.Physics.ARCADE);
+	player.sprite.body.collideWorldBounds = true;
+    
+	other_players_group = game.add.physicsGroup();
+    game.physics.enable(other_players_group, Phaser.Physics.ARCADE);
+	CreatePlayer(game.world.randomX, 550);	
+	socket = io(); // This triggers the 'connection' event on the server
+	socket.emit('new-player',{x:player.sprite.x, y:player.sprite.y});
+	socket.on('update-players',function(players_data){
+		var players_found = {};
+		// Loop over all the player data received
+		for(var id in players_data){
+			// If the player hasn't been created yet
+			if(other_players[id] == undefined && id != socket.id){ // Make sure you don't create yourself
+				var data = players_data[id];
+				var p = CreatePlayer(data.x,data.y);
+				other_players[id] = p;
+				console.log("Created new player at (" + data.x + ", " + data.y + ")");
+			}
+			players_found[id] = true;
+				
+			// Update positions of other players 
+			if(id != socket.id){
+		  		other_players[id].x  = players_data[id].x; // Update target, not actual position, so we can interpolate
+				other_players[id].y  = players_data[id].y;
+			}
+		}
+			// Check if a player is missing and delete them 
+		for(var id in other_players){
+			if(!players_found[id]){
+				other_players[id].destroy();
+			}
+		}	   
+	});
+
 	//Balls are controlled together as a group 
     balls = game.add.group();
     balls.enableBody = true;
@@ -71,9 +139,18 @@ function create() {
     Interval = startInterval;
 	
 	//to manipulate the event interval, get timer object as myLoop
-    myLoop = timer.loop(startInterval, createBall, this); //(period, callback, context)
-    timer.start();
+    //myLoop = timer.loop(startInterval, createBall, this); //(period, callback, context)
+    //timer.start();
 
+}
+
+function CreatePlayer(x, y) {
+	// returns the sprite just created 
+	var other_player = other_players_group.create(x,y,'dude');
+	other_player.body.collideWorldBounds = true;
+	other_player.body.bounce.setTo(0.8,0.8);
+	other_player.anchor.setTo(0.5,0.5);
+	return other_player;
 }
 
 // Generate falling balls randomly
@@ -85,7 +162,7 @@ function createBall() {
 
 	//make it difficult as it goes
     if (ballNumber % 20 === 0) {
-        Interval = 0.9 * Interval;
+        Interval = 1 * Interval;
     }
 	var ball = balls.create(game.world.randomX, 0, 'ball');
 	game.physics.enable(ball, Phaser.Physics.ARCADE);
@@ -98,25 +175,22 @@ function createBall() {
 //Part3: Update
 //Respond the event during play
 function update() {
-	//Register callback for overlap event between character and balls 
-	game.physics.arcade.overlap(sprite, balls, collisionHandler, null, this);
-   
-	//Initial velocity of character 
-    sprite.body.velocity.x = 0;
-    //sprite.body.velocity.y = 0;
+	//game.physics.arcade.collide(player.sprite, other_players_group, collision, process, this);
+	game.physics.arcade.collide(player.sprite, other_players_group);
+	player.update();
     
 	//User control 
     if (cursors.left.isDown)
     {
-        sprite.body.velocity.x = -300;
+     //   sprite.body.acceleration.x = -200;
     }
     else if (cursors.right.isDown)
     {
-        sprite.body.velocity.x = 300;
+      //  sprite.body.acceleration.x = 200;
     }
-    if (jumpButton.isDown && (sprite.body.onFloor() || sprite.body.touching.down))
+    if (jumpButton.isDown )
     {
-        sprite.body.velocity.y = -400;
+       // sprite.body.velocity.y = -400;
     }
 }
 
@@ -133,8 +207,6 @@ function collisionHandler (phaser, ball) {
 
     //the "click to restart" handler
     game.input.onTap.addOnce(restart,this);
-
-    
 
 }
 
