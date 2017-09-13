@@ -30,11 +30,14 @@ io.on('connection', function(socket){
 	});
   
 	// Listen for move events and tell all other clients that something has moved 
-	socket.on('move-player',function(position_data){
+	socket.on('move-player',function(data){
 		if(players[socket.id] == undefined) return; // Happens if the server restarts and a client is still connected
- 
-		players[socket.id].x = position_data.x;  
-		players[socket.id].y = position_data.y; 
+		
+		players[socket.id] = data;
+		//players[socket.id].x = data.x;  
+		//players[socket.id].y = data.y; 
+		//players[socket.id].vx = data.vx;  
+		//players[socket.id].vy = data.vy; 
 		io.emit('update-players',players);
  
  	});

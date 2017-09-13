@@ -17,15 +17,9 @@ function preload() {
 
 //Part2 : create
 
-//Some variables are needed in both create() and update(), so it is declared as global variables.
-
-//character
-var sprite;
-var sprite_copy;
 //# of ball for scores
 var ballNumber;
 var balls;
-var players;
 var other_players_group;
 
 //cursor
@@ -38,7 +32,7 @@ var timer;
 var myLoop;
 var startInterval;
 var Interval;
-
+var jumpTimer = 0;
 var WINDOW_WIDTH = 750;
 var WINDOW_HEIGHT = 600;
 var game = new Phaser.Game(WINDOW_WIDTH, WINDOW_HEIGHT, Phaser.AUTO, '', {preload:preload, create:create, update:update, render:render} );
@@ -56,14 +50,14 @@ face:'front',
 update: function(){
 
 	// No button pressed
-	if (this.sprite.body.velocity.x < 25 && this.sprite.body.velocity.x > -25 ) {
-		this.sprite.body.velocity.x = 0;
+	if (this.sprite.body.velocity.x < 5 && this.sprite.body.velocity.x > -5 ) {
+		//this.sprite.body.velocity.x = 0;
 		this.face = 'front';
-	} else if (this.sprite.body.velocity.x >= 25 ) {
-		this.sprite.body.velocity.x -= 25; 
+	} else if (this.sprite.body.velocity.x >= 5 ) {
+		this.sprite.body.velocity.x -= 5; 
 		this.face = 'right';
-	} else if (this.sprite.body.velocity.x <= -25 ) {
-		this.sprite.body.velocity.x += 25; 
+	} else if (this.sprite.body.velocity.x <= -5 ) {
+		this.sprite.body.velocity.x += 5; 
 		this.face = 'left';
 	}
 	
@@ -77,6 +71,10 @@ update: function(){
 	        this.sprite.body.velocity.x -= 50;
 		}
 	}
+	if (game.input.keyboard.isDown(Phaser.Keyboard.UP) && this.sprite.body.onFloor() && game.time.now > jumpTimer){
+	    this.sprite.body.velocity.y = -500;
+		jumpTimer = game.time.now + 750;
+	}
 	
 	// Determine animation.
 	if (this.face == 'right') {	
@@ -86,7 +84,7 @@ update: function(){
 	} else if (this.face == 'front') {
 		this.sprite.frame = 4;
 	}	
-	socket.emit('move-player',{x:this.sprite.body.x,y:this.sprite.body.y,vx:this.sprite.body.velocity.x, vy:this.sprite.body.velocity.y,face:this.face})
+	socket.emit('move-player',{x:this.sprite.body.x,y:this.sprite.body.y,vx:this.sprite.body.velocity.x, vy:this.sprite.body.velocity.y})
 
 }
 };
@@ -98,28 +96,31 @@ function create() {
 
 	//Set the entire physical system as a ARCADE
     game.physics.startSystem(Phaser.Physics.ARCADE);
-
+	game.physics.arcade.gravity.y = 900;
+	game.time.desiredFps = 30;
 	//Set the Gameover message and make it invisiable for now.
     stateText = game.add.text(game.world.centerX,game.world.centerY,' ', { font: '84px Arial', fill: '#fff' });
     stateText.anchor.setTo(0.5, 0.5);
     stateText.visiable = false;
 
+
 	//Create an object for user
 	player.sprite = game.add.sprite(game.world.randomX, 550, 'dude');
-	player.sprite.anchor.setTo(0.5,0.5);
+    game.physics.enable(player.sprite, Phaser.Physics.ARCADE);
     player.sprite.animations.add('left', [0, 1, 2, 3], 10, true);
     player.sprite.animations.add('right', [5, 6, 7, 8], 10, true);
-    game.physics.enable(player.sprite, Phaser.Physics.ARCADE);
     player.sprite.body.enable = true;
-	player.sprite.body.bounce.setTo(1.5,1.5);
+	player.sprite.body.bounce.setTo(1,0.2);
 	player.sprite.body.collideWorldBounds = true;
-	console.log("test");
     
 	other_players_group = game.add.physicsGroup();
     game.physics.enable(other_players_group, Phaser.Physics.ARCADE);
-	CreatePlayer(game.world.randomX, 550);	
+
+
 	socket = io(); // This triggers the 'connection' event on the server
-	socket.emit('new-player',{x:player.sprite.x, y:player.sprite.y});
+
+	socket.emit('new-player',{x:player.sprite.body.x, y:player.sprite.body.y, vx:player.sprite.body.velocity.x, vy:player.sprite.body.velocity.y});
+
 	socket.on('update-players',function(players_data){
 		var players_found = {};
 		// Loop over all the player data received
@@ -127,7 +128,7 @@ function create() {
 			// If the player hasn't been created yet
 			if(other_players[id] == undefined && id != socket.id){ // Make sure you don't create yourself
 				var data = players_data[id];
-				var p = CreatePlayer(data.x,data.y);
+				var p = CreateOtherPlayer(data.x,data.y,data.vx,data.vy);
 				other_players[id] = p;
 				console.log("Created new player at (" + data.x + ", " + data.y + ")");
 			}
@@ -135,8 +136,11 @@ function create() {
 				
 			// Update positions of other players 
 			if(id != socket.id){
-		  		other_players[id].x  = players_data[id].x; // Update target, not actual position, so we can interpolate
-				other_players[id].y  = players_data[id].y;
+		  		other_players[id].x = players_data[id].x; // Update target, not actual position, so we can interpolate
+				other_players[id].y = players_data[id].y;
+		  		other_players[id].body.velocity.x = players_data[id].vx; 
+				other_players[id].body.velocity.y = players_data[id].vy;
+				//console.log(players_data[id].vx + ',' + players_data[id].vy);
 			}
 		}
 			// Check if a player is missing and delete them 
@@ -169,12 +173,15 @@ function create() {
 
 }
 
-function CreatePlayer(x, y) {
+function CreateOtherPlayer(x, y, vx, vy) {
 	// returns the sprite just created 
-	var other_player = other_players_group.create(x,y,'dude');
+	var other_player = other_players_group.create(x, y, 'dude');
+    other_player.animations.add('left', [0, 1, 2, 3], 10, true);
+    other_player.animations.add('right', [5, 6, 7, 8], 10, true);
+    game.physics.enable(other_player, Phaser.Physics.ARCADE);
+    other_player.body.enable = true;
+	other_player.body.bounce.setTo(1.5,0.2);
 	other_player.body.collideWorldBounds = true;
-	other_player.body.bounce.setTo(1.5,1.5);
-	other_player.anchor.setTo(0.5,0.5);
 	return other_player;
 }
 
@@ -201,11 +208,15 @@ function createBall() {
 //Respond the event during play
 function update() {
 	//game.physics.arcade.collide(player.sprite, other_players_group, collision, process, this);
-	game.physics.arcade.collide(player.sprite, other_players_group);
+	game.physics.arcade.collide(player.sprite, other_players_group, collide_callback);
+	game.physics.arcade.collide(other_players_group,player.sprite, collide_callback);
 	player.update();
     
 }
 
+function collide_callback (sprite, group) {
+	console.log('collide')
+}
 //Callback function
 function collisionHandler (phaser, ball) {
 	
